@@ -22,9 +22,9 @@ class ExpressionSourcePipeLine:
 	def __init__(self,tokenList,pipeline):
 		self.wordSize = 2
 		self.tokens = tokenList 											# save tokens.
-		self.tokens.append(")")												# force closure of last one.
 		self.pipeline = pipeline 											# save calculation pipeline.
-		self.stack = [ "(" ]												# action stack with ( which ends it.
+		self.endMarker = "[TOP]"
+		self.stack = [ self.endMarker ]										# operator stack
 
 		self.precedence = { }												# precedence of various tokens.
 		self.precedenceAdd(0,"and,or,xor")									# logical operators
@@ -48,15 +48,19 @@ class ExpressionSourcePipeLine:
 	#
 	def process(self):
 		self.mode = 'T'														# start in TERM mode this sort of GOTOs
-		for token in self.tokens:
+		tCount = 0
+		while self.mode != 'Q': 											# until quit.
+			token = self.tokens[tCount]
+			tCount+= 1
+
 			print("DBG:",token,self.stack,self.pipeline.get())
 			if self.mode == 'T':											
 				self.term(token)
 			elif self.mode == 'O':
 				self.operand(token)
-		assert len(self.stack) == 0,"Too many open brackets"
 
-		print("DBG:"+self.mode,token,self.stack,self.pipeline.get())
+		print("DBG:Post",self.stack,self.pipeline.get())
+		print("DBG:End",self.stack,self.pipeline.get())
 	#
 	#	Process a term.
 	#
@@ -93,17 +97,19 @@ class ExpressionSourcePipeLine:
 			self.stack.append(token)										# stack the new token.
 			self.mode = 'T'
 
-		elif token == ")":													# close bracket
-			assert len(self.stack) > 0,"Too many close brackets"
-			while self.stack[-1] != "(":									# do ops back to open bracket.
+		else:
+			while self.stack[-1] != "(" and self.stack[-1] != self.endMarker: # do ops back to open bracket/end marker
 				self.pipeline.execute(self.stack[-1])						# destack tokens.
 				self.stack = self.stack[:-1]
-			self.stack = self.stack[:-1]									# dump the ( on the TOS.
-			self.mode = 'O'
-		else:
-			assert False,"Unknown operator : "+token
+			self.stack = self.stack[:-1]									# dump the (/# on the TOS.
+			if token != ")":												# is it an unknown operator, e.g. the end ?
+				assert len(self.stack) == 0,"Too many open brackets" 		# have we closed everything.
+				self.mode = 'Q' 											# if so, quit.
+			else:
+				assert len(self.stack) > 0,"Too many close brackets"		# pulled the ending '#'
+				self.mode = 'O'
 
-expr = "2 * ( 3 + 5 ) +"
+expr = "len a + 2 , "
 expr = [x for x in expr.lower().split(" ") if x.strip() != ""]			
 
 es = ExpressionSourcePipeLine(expr,PipeLine())
