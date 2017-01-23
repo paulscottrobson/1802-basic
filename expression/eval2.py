@@ -69,6 +69,10 @@ class ExpressionSourcePipeLine:
 			self.pipeline.pushValue(int(token))								# push its value on the pipeline.
 			self.mode = 'O' 												# and expect operator
 
+		elif token == "len":												# is it a function call (LEN only here)
+			self.stack.append(token) 										# push it
+			self.mode = 'T' 												# still after term.
+
 		elif re.match("^[a-z]$",token[0]):									# found a stand alone variable.
 			self.pipeline.pushValue((ord(token[0])-ord('a')) * self.wordSize + 10000) 	# push address on the stack
 			if len(token) == 1:												# just A-Z
@@ -88,19 +92,20 @@ class ExpressionSourcePipeLine:
 	#
 	def operand(self,token):
 
+		while self.stack[-1] == "len":										# unpop one element calls.
+			self.executeTop()
+
 		if token in self.precedence:										# check we actually have an operator.
 			tokenPrecedence = self.precedence[token]						# get its precedence
 																			# while precedence(token) < precedence(tos)
 			while len(self.stack) > 1 and self.stack[-1] != "(" and tokenPrecedence < self.precedence[self.stack[-1]]:
-				self.pipeline.execute(self.stack[-1])						# destack tokens.
-				self.stack = self.stack[:-1]
+				self.executeTop()
 			self.stack.append(token)										# stack the new token.
 			self.mode = 'T'
 
 		else:
 			while self.stack[-1] != "(" and self.stack[-1] != self.endMarker: # do ops back to open bracket/end marker
-				self.pipeline.execute(self.stack[-1])						# destack tokens.
-				self.stack = self.stack[:-1]
+				self.executeTop()
 			self.stack = self.stack[:-1]									# dump the (/# on the TOS.
 			if token != ")":												# is it an unknown operator, e.g. the end ?
 				assert len(self.stack) == 0,"Too many open brackets" 		# have we closed everything.
@@ -108,8 +113,14 @@ class ExpressionSourcePipeLine:
 			else:
 				assert len(self.stack) > 0,"Too many close brackets"		# pulled the ending '#'
 				self.mode = 'O'
+	#
+	#	Execute system call for top of stack.
+	#
+	def executeTop(self):
+		self.pipeline.execute(self.stack[-1])								# destack tokens.
+		self.stack = self.stack[:-1]
 
-expr = "len a + 2 , "
+expr = "len ( 2 * len 6 ) * ( 3 + 2 ) , "
 expr = [x for x in expr.lower().split(" ") if x.strip() != ""]			
 
 es = ExpressionSourcePipeLine(expr,PipeLine())
@@ -118,13 +129,11 @@ es.process()
 #
 #	+ @ ? save their retrieved values as can be used to save result.
 #
-#
-#	Todo: 1 parameter system functions.
-#
 
 # 	Tokenising :-
 #
-#	Operators first
+#	Operators first (blocks of four)
+#	Single parameter functions LEN RND SGN ABS etc.
 #	Keywords that execute things
 #	Anything else.
 #	AA-ZZ
